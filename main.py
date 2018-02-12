@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
-# things.py
+# Developed by rezaduty
 
-# Let's get this party started!
 import falcon
 import feedparser
 import jalali
@@ -106,9 +105,8 @@ class ThingsResource(object):
     def on_get(self, req, resp):
         """Handles GET requests"""
         resp.status = falcon.HTTP_200  # This is the default status
-
+        #TODO should be upload myjson.com 
         r = requests.post("https://api.myjson.com/bins", data=result)
-        print(r.status_code, r.reason)
         resp.body = (result)
 
 
