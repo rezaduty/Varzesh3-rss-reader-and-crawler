@@ -1,107 +1,122 @@
-#!flask/bin/python
-from flask import Flask, jsonify, abort, request, make_response, url_for
-from flask.ext.httpauth import HTTPBasicAuth
+# -*- coding: utf-8 -*-
+# things.py
 
-app = Flask(__name__, static_url_path = "")
-auth = HTTPBasicAuth()
+# Let's get this party started!
+import falcon
+import feedparser
+import jalali
+import persian
+import requests
+from bs4 import BeautifulSoup
+from newspaper import Article
 
-@auth.get_password
-def get_password(username):
-    if username == 'miguel':
-        return 'python'
-    return None
+result = ""
 
-@auth.error_handler
-def unauthorized():
-    return make_response(jsonify( { 'error': 'Unauthorized access' } ), 403)
-    # return 403 instead of 401 to prevent browsers from displaying the default auth dialog
-    
-@app.errorhandler(400)
-def not_found(error):
-    return make_response(jsonify( { 'error': 'Bad request' } ), 400)
 
-@app.errorhandler(404)
-def not_found(error):
-    return make_response(jsonify( { 'error': 'Not found' } ), 404)
+def get_top_img_and_description(url):
+    article = Article(url)
+    article.download()
+    article.html
+    article.parse()
 
-tasks = [
-    {
-        'id': 1,
-        'title': u'Buy groceries',
-        'description': u'Milk, Cheese, Pizza, Fruit, Tylenol', 
-        'done': False
-    },
-    {
-        'id': 2,
-        'title': u'Learn Python',
-        'description': u'Need to find a good Python tutorial on the web', 
-        'done': False
-    }
-]
+    r = requests.get(url)
+    r.encoding = "utf-8"
 
-def make_public_task(task):
-    new_task = {}
-    for field in task:
-        if field == 'id':
-            new_task['uri'] = url_for('get_task', task_id = task['id'], _external = True)
+    data = r.text
+    soup = BeautifulSoup(data, 'html.parser')
+
+    div = soup.find('body')
+    ps = div.find_all('p')
+    a = ""
+    for p in ps:
+        a = a + p.text
+        print (a)
+
+    print (article.top_image)
+
+# Falcon follows the REST architectural style, meaning (among
+# other things) that you think in terms of resources and state
+# transitions, which map to HTTP verbs.
+# Function to fetch the rss feed and return the parsed RSS
+
+
+def parseRSS(rss_url):
+    return feedparser.parse(rss_url)
+
+# Function grabs the rss feed headlines (titles) and returns them as a list
+
+
+def getHeadlines(rss_url):
+    headlines = []
+
+    feed = parseRSS(rss_url)
+    headlines.append("[")
+    i = 0
+    length_key = len(feed['items'])  # length of the list stored at `'key'` ...
+
+    #print length_key
+
+    for newsitem in feed['items']:
+        #print newsitem
+        i = i+1
+        article = Article(newsitem['link'])
+        article.download()
+        article.html
+        article.parse()
+            
+        if i == length_key:
+
+            headlines.append('{"title": "'+newsitem['title']+'",')
+            headlines.append('"description": "'+newsitem['description']+'",')
+            headlines.append('"image": "'+article.top_image+'",')
+            headlines.append('"link": "'+newsitem['link']+'"}')
+
         else:
-            new_task[field] = task[field]
-    return new_task
-    
-@app.route('/todo/api/v1.0/tasks', methods = ['GET'])
-@auth.login_required
-def get_tasks():
-    return jsonify( { 'tasks': map(make_public_task, tasks) } )
+            headlines.append('{"title": "'+newsitem['title']+'",')
+            headlines.append('"description": "'+newsitem['description']+'",')
+            headlines.append('"image": "'+article.top_image+'",')
+            headlines.append('"link": "'+newsitem['link']+'"},')
 
-@app.route('/todo/api/v1.0/tasks/<int:task_id>', methods = ['GET'])
-@auth.login_required
-def get_task(task_id):
-    task = filter(lambda t: t['id'] == task_id, tasks)
-    if len(task) == 0:
-        abort(404)
-    return jsonify( { 'task': make_public_task(task[0]) } )
+    headlines.append("]")
 
-@app.route('/todo/api/v1.0/tasks', methods = ['POST'])
-@auth.login_required
-def create_task():
-    if not request.json or not 'title' in request.json:
-        abort(400)
-    task = {
-        'id': tasks[-1]['id'] + 1,
-        'title': request.json['title'],
-        'description': request.json.get('description', ""),
-        'done': False
-    }
-    tasks.append(task)
-    return jsonify( { 'task': make_public_task(task) } ), 201
+    return headlines
 
-@app.route('/todo/api/v1.0/tasks/<int:task_id>', methods = ['PUT'])
-@auth.login_required
-def update_task(task_id):
-    task = filter(lambda t: t['id'] == task_id, tasks)
-    if len(task) == 0:
-        abort(404)
-    if not request.json:
-        abort(400)
-    if 'title' in request.json and type(request.json['title']) != unicode:
-        abort(400)
-    if 'description' in request.json and type(request.json['description']) is not unicode:
-        abort(400)
-    if 'done' in request.json and type(request.json['done']) is not bool:
-        abort(400)
-    task[0]['title'] = request.json.get('title', task[0]['title'])
-    task[0]['description'] = request.json.get('description', task[0]['description'])
-    task[0]['done'] = request.json.get('done', task[0]['done'])
-    return jsonify( { 'task': make_public_task(task[0]) } )
-    
-@app.route('/todo/api/v1.0/tasks/<int:task_id>', methods = ['DELETE'])
-@auth.login_required
-def delete_task(task_id):
-    task = filter(lambda t: t['id'] == task_id, tasks)
-    if len(task) == 0:
-        abort(404)
-    tasks.remove(task[0])
-    return jsonify( { 'result': True } )
-    
-if __name__ == '__main__':
-    app.run(debug = True)
+
+# A list to hold all headlines
+allheadlines = []
+
+# List of RSS feeds that we will fetch and combine
+newsurls = {
+    'Sport':           'http://www.varzesh3.com/rss/all'
+}
+
+# Iterate over the feed urls
+for key, url in newsurls.items():
+    # Call getHeadlines() and combine the returned headlines with allheadlines
+    allheadlines.extend(getHeadlines(url))
+
+
+# Iterate over the allheadlines list and print each headline
+for hl in allheadlines:
+    result = result + hl + "\n"
+    #print result
+
+
+class ThingsResource(object):
+    def on_get(self, req, resp):
+        """Handles GET requests"""
+        resp.status = falcon.HTTP_200  # This is the default status
+
+        r = requests.post("https://api.myjson.com/bins", data=result)
+        print(r.status_code, r.reason)
+        resp.body = (result)
+
+
+# falcon.API instances are callable WSGI apps
+app = falcon.API()
+
+# Resources are represented by long-lived class instances
+things = ThingsResource()
+
+# things will handle all requests to the '/things' URL path
+app.add_route('/feed', things)
