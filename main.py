@@ -3,7 +3,6 @@
 
 import falcon
 import feedparser
-import jalali
 import persian
 import requests
 from bs4 import BeautifulSoup
